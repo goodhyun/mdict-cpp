@@ -9,7 +9,7 @@
 #pragma once
 #include <vector>
 
-#include "miniz/miniz.h"
+#include <zlib.h>
 
 /**
  * Decompresses zlib-compressed data into a vector
@@ -28,7 +28,8 @@ inline std::vector<uint8_t> zlib_mem_uncompress(const void *source,
                                                 size_t uncompress_bound = 0) {
   //   throw_except_if_msg(nullptr==source||0==sourceLen,"invalid source");
   // uncompress_bound为0时将缓冲区设置为sourceLen的8倍长度
-  if (!uncompress_bound) uncompress_bound = sourceLen << 3;
+  if (!uncompress_bound)
+    uncompress_bound = sourceLen << 3;
   for (;;) {
     std::vector<uint8_t> buffer(uncompress_bound);
     auto destLen = uLongf(buffer.size());
@@ -39,7 +40,7 @@ inline std::vector<uint8_t> zlib_mem_uncompress(const void *source,
       return std::vector<uint8_t>(buffer.data(), buffer.data() + destLen);
     else if (Z_BUF_ERROR == err) {
       // 缓冲区不足
-      uncompress_bound <<= 2;  // 缓冲区放大4倍再尝试
+      uncompress_bound <<= 2; // 缓冲区放大4倍再尝试
       continue;
     }
     // 其他错误抛出异常

@@ -11,15 +11,51 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <locale>  // For std::wstring_convert
+#include <locale> // For std::wstring_convert
 // #include "deps/miniz/miniz.h"
+#include <CoreFoundation/CoreFoundation.h>
 #include <zlib.h>
 
-#include <codecvt>
 #include <string>
 #include <vector>
 
 using namespace std;
+
+std::string convert_encoding(const char *bytes, unsigned long offset,
+                             unsigned long len, const char *from_encoding) {
+  if (len == 0)
+    return "";
+
+  CFStringEncoding encoding;
+  std::string enc_name(from_encoding);
+  if (enc_name == "GB18030" || enc_name == "GBK") {
+    encoding = kCFStringEncodingGB_18030_2000;
+  } else if (enc_name == "GB2312") {
+    encoding = kCFStringEncodingEUC_CN;
+  } else if (enc_name == "BIG5") {
+    encoding = kCFStringEncodingBig5;
+  } else {
+    return std::string(bytes + offset, len);
+  }
+
+  CFStringRef cf_str = CFStringCreateWithBytes(
+      NULL, (const UInt8 *)(bytes + offset), len, encoding, false);
+  if (!cf_str) {
+    return std::string(bytes + offset, len);
+  }
+
+  CFIndex utf8_len;
+  CFStringGetBytes(cf_str, CFRangeMake(0, CFStringGetLength(cf_str)),
+                   kCFStringEncodingUTF8, 0, false, NULL, 0, &utf8_len);
+
+  std::string result(utf8_len, '\0');
+  CFStringGetBytes(cf_str, CFRangeMake(0, CFStringGetLength(cf_str)),
+                   kCFStringEncodingUTF8, 0, false, (UInt8 *)&result[0],
+                   utf8_len, NULL);
+
+  CFRelease(cf_str);
+  return result;
+}
 
 char const hex_chars[16] = {'0', '1', '2', '3', '4', '5', '6', '7',
                             '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
@@ -89,10 +125,9 @@ void putbytes(const char *bytes, int len, bool hex = true,
  *****************************************************************/
 
 // 工具包装器，用于字符转换 为wstring/wbuffer适配绑定到 locale 的平面
-template <class Facet>
-struct usable_facet : public Facet {
- public:
-  using Facet::Facet;  // inherit constructors
+template <class Facet> struct usable_facet : public Facet {
+public:
+  using Facet::Facet; // inherit constructors
   ~usable_facet() {}
 
   // workaround for compilers without inheriting constructors:
@@ -101,28 +136,58 @@ struct usable_facet : public Facet {
 };
 
 template <typename internT, typename externT, typename stateT>
-using facet_codecvt = usable_facet<std::codecvt<internT, externT, stateT> >;
+using facet_codecvt = usable_facet<std::codecvt<internT, externT, stateT>>;
 
 /*************************************************
  * little-endian binary to utf16 to utf8 string   *
  **************************************************/
 
-// Helper function to convert UTF-16 to UTF-8
+// Helper function to convert UTF-16 to UTF-8 with surrogate pair support and
+// error handling
 std::string utf16_to_utf8(const std::u16string &utf16) {
   std::string utf8;
-  utf8.reserve(utf16.length() *
-               3);  // UTF-8 can be up to 3 bytes per UTF-16 char
+  utf8.reserve(utf16.length() * 3);
 
-  for (char16_t c : utf16) {
+  for (size_t i = 0; i < utf16.length(); ++i) {
+    char16_t c = utf16[i];
+
+    // Check for surrogate pairs
+    if (c >= 0xD800 && c <= 0xDBFF) {
+      // High surrogate
+      if (i + 1 < utf16.length()) {
+        char16_t low = utf16[i + 1];
+        if (low >= 0xDC00 && low <= 0xDFFF) {
+          // Valid surrogate pair
+          uint32_t codepoint = 0x10000 + ((c - 0xD800) << 10) + (low - 0xDC00);
+          utf8.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+          utf8.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+          utf8.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+          utf8.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+          ++i; // Skip low surrogate
+          continue;
+        }
+      }
+      // Invalid surrogate (lone high surrogate or invalid low surrogate)
+      // Replace with replacement character U+FFFD (EF BF BD)
+      utf8.push_back('\xEF');
+      utf8.push_back('\xBF');
+      utf8.push_back('\xBD');
+      continue;
+    } else if (c >= 0xDC00 && c <= 0xDFFF) {
+      // Lone low surrogate
+      // Replace with replacement character U+FFFD (EF BF BD)
+      utf8.push_back('\xEF');
+      utf8.push_back('\xBF');
+      utf8.push_back('\xBD');
+      continue;
+    }
+
     if (c <= 0x7F) {
-      // ASCII character
       utf8.push_back(static_cast<char>(c));
     } else if (c <= 0x7FF) {
-      // 2-byte UTF-8
       utf8.push_back(static_cast<char>(0xC0 | (c >> 6)));
       utf8.push_back(static_cast<char>(0x80 | (c & 0x3F)));
     } else {
-      // 3-byte UTF-8
       utf8.push_back(static_cast<char>(0xE0 | (c >> 12)));
       utf8.push_back(static_cast<char>(0x80 | ((c >> 6) & 0x3F)));
       utf8.push_back(static_cast<char>(0x80 | (c & 0x3F)));
@@ -133,20 +198,35 @@ std::string utf16_to_utf8(const std::u16string &utf16) {
 
 // binary to utf16->utf8
 std::string le_bin_utf16_to_utf8(const char *bytes, int offset, int len) {
-  char *cbytes = (char *)calloc(len, sizeof(char));
-  if (cbytes == nullptr) {
+  if (len <= 0)
     return "";
+
+  // Create a copy to ensure null termination for u16string if needed,
+  // though u16string constructor with length is safer.
+  std::vector<char16_t> wcbytes(len / 2);
+  std::memcpy(wcbytes.data(), bytes + offset, (len / 2) * 2);
+
+  std::u16string u16(wcbytes.data(), len / 2);
+  return utf16_to_utf8(u16);
+}
+
+// big-endian binary to utf16 to utf8 string
+std::string be_bin_utf16_to_utf8(const char *bytes, int offset, int len) {
+  if (len <= 0)
+    return "";
+
+  std::vector<char16_t> wcbytes(len / 2);
+  const unsigned char *src =
+      reinterpret_cast<const unsigned char *>(bytes + offset);
+
+  for (int i = 0; i < len / 2; ++i) {
+    // Swap bytes: BE to Host (assuming Host is LE)
+    wcbytes[i] = (static_cast<char16_t>(src[i * 2]) << 8) |
+                 static_cast<char16_t>(src[i * 2 + 1]);
   }
-  // TODO insecure
-  std::memcpy(cbytes, bytes + (offset * sizeof(char)), len * sizeof(char));
-  // convert char* to char16_t*
-  char16_t *wcbytes = reinterpret_cast<char16_t *>(cbytes);
 
-  std::u16string u16 = std::u16string(wcbytes);
-  std::string u8 = utf16_to_utf8(u16);
-
-  if (len > 0) std::free(cbytes);
-  return u8;
+  std::u16string u16(wcbytes.data(), len / 2);
+  return utf16_to_utf8(u16);
 }
 
 std::string be_bin_to_utf8(const char *bytes, unsigned long offset,

@@ -13,7 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <string>  // std::stof
+#include <string> // std::stof
 #include <vector>
 
 #include "mdict_extern.h"
@@ -128,25 +128,27 @@ namespace mdict {
 #define NUMFMT_BE_8BYTESQ 0;
 #define NUMFMT_BE_4BYTESI 1;
 
-#define ENCODING_UTF8 0;
-#define ENCODING_UTF16 1;
-#define ENCODING_BIG5 2;
-#define ENCODING_GBK 3;
-#define ENCODING_GB2312 4;
-#define ENCODING_GB18030 5;
+#define ENCODING_UTF8 0
+#define ENCODING_UTF16 1
+#define ENCODING_BIG5 2
+#define ENCODING_GBK 3
+#define ENCODING_GB2312 4
+#define ENCODING_GB18030 5
 
-#define MDXTYPE "MDX";
-#define MDDTYPE "MDD";
+#define MDXTYPE "MDX"
+#define MDDTYPE "MDD"
 
 /**
  * key block info class definition
  */
 class key_block_info {
- public:
+public:
   // first key of this key block
   std::string first_key;
+  std::string first_key_normalized;
   // last key of this key block
   std::string last_key;
+  std::string last_key_normalized;
   // key block start offset
   unsigned long key_block_start_offset;
   // key block compressed size
@@ -179,15 +181,17 @@ class key_block_info {
 };
 
 class key_list_item {
- public:
+public:
   unsigned long record_start;
   std::string key_word;
-  key_list_item(unsigned long kid, std::string kw)
-      : record_start(kid), key_word(std::move(kw)) {}
+  std::string key_word_normalized;
+  key_list_item(unsigned long kid, std::string kw, std::string kwn = "")
+      : record_start(kid), key_word(std::move(kw)),
+        key_word_normalized(std::move(kwn)) {}
 };
 
 class record_header_item {
- public:
+public:
   unsigned long block_id;
   unsigned long compressed_size;
   unsigned long decompressed_size;
@@ -196,15 +200,13 @@ class record_header_item {
   record_header_item(unsigned long bid, unsigned long comp_size,
                      unsigned long uncomp_size, unsigned long comp_accu,
                      unsigned long decomp_accu)
-      : block_id(bid),
-        compressed_size(comp_size),
-        decompressed_size(uncomp_size),
-        compressed_size_accumulator(comp_accu),
+      : block_id(bid), compressed_size(comp_size),
+        decompressed_size(uncomp_size), compressed_size_accumulator(comp_accu),
         decompressed_size_accumulator(decomp_accu) {};
 };
 
 class record {
- public:
+public:
   std::string key_text;
   unsigned long key_idx;
   int encoding;
@@ -236,7 +238,7 @@ class record {
  * Mdict class definition
  */
 class Mdict {
- public:
+public:
   /**
    * constructor
    * @param fn dictionary file name
@@ -264,7 +266,8 @@ class Mdict {
   std::string lookup(std::string word);
 
   /**
-   * lookup the definition of a word by system search finction from all keys list
+   * lookup the definition of a word by system search finction from all keys
+   * list
    * @param word the word wich we want to search
    * @return
    */
@@ -287,6 +290,9 @@ class Mdict {
    * @return
    */
   std::vector<std::string> suggest(const std::string word);
+
+  std::vector<key_list_item *> search(const std::string query, int method,
+                                      int max_results);
 
   /**
    *
@@ -315,7 +321,8 @@ class Mdict {
    * @param end Ending position in the dictionary
    * @return The reduced range
    */
-  long reduce_key_info_block(std::string phrase, unsigned long start, unsigned long end);
+  long reduce_key_info_block(std::string phrase, unsigned long start,
+                             unsigned long end);
 
   /**
    * Reduce search range using a word list
@@ -323,7 +330,8 @@ class Mdict {
    * @param phrase The phrase to search for
    * @return The reduced range
    */
-  long reduce_key_info_block_items_vector(std::vector<key_list_item *> wordlist, std::string phrase);
+  long reduce_key_info_block_items_vector(std::vector<key_list_item *> wordlist,
+                                          std::string phrase);
 
   /**
    * Reduce search range from a record start position
@@ -338,13 +346,18 @@ class Mdict {
    * @param phrase the target word phrase
    * @return definition
    */
-  std::string reduce_particial_keys_vector(std::vector<std::pair<std::string, std::string>>& vec,
-                      std::string phrase);
+  std::string reduce_particial_keys_vector(
+      std::vector<std::pair<std::string, std::string>> &vec,
+      std::string phrase);
 
   std::vector<key_list_item *> keyList();
 
   std::string parse_definition(const std::string word,
                                unsigned long record_start);
+
+  std::string get_title() const { return title; }
+
+  std::string decode_key_text(const char *data, size_t len);
 
   std::string filetype;
 
@@ -392,8 +405,8 @@ class Mdict {
   int decode_key_block(unsigned char *key_block_buffer,
                        unsigned long kb_buff_len);
 
-  std::vector<key_list_item *> decode_key_block_by_block_id(
-      unsigned long block_id);
+  std::vector<key_list_item *>
+  decode_key_block_by_block_id(unsigned long block_id);
 
   /**
    * Read the record block header
@@ -407,8 +420,10 @@ class Mdict {
    */
   int decode_record_block();
 
-  std::vector<std::pair<std::string, std::string>> decode_record_block_by_rid(
-      unsigned long rid /* record id */);
+  std::vector<std::pair<std::string, std::string>>
+  decode_record_block_by_rid(unsigned long rid /* record id */);
+
+  std::vector<uint8_t> decode_record_block_buffer_by_rid(unsigned long rid);
 
   /**
    * Print the dictionary header information
@@ -435,7 +450,7 @@ class Mdict {
    */
   bool endsWith(const std::string &fullString, const std::string &ending);
 
- private:
+private:
   /********************************
    *     general section           *
    ********************************/
@@ -494,6 +509,7 @@ class Mdict {
   uint64_t key_block_body_start = 0;
 
   // head info part
+  std::string title;
   int encrypt = 0;
   float version = 1.0;
 
@@ -514,14 +530,14 @@ class Mdict {
 
   uint64_t record_block_info_offset;
 
-  uint64_t record_block_info_size;  // >= 2.0 32, else 16
+  uint64_t record_block_info_size; // >= 2.0 32, else 16
 
-  uint64_t record_block_number;          // [0:8/4]    - record blcok number
-  uint64_t record_block_entries_number;  // [8:16/4:8] - num entries the
-                                         // key-value entries number
-  uint64_t record_block_header_size;  // [16:24/8:12] - record block info size
-                                      // // TODO
-  uint64_t record_block_size;         // [24:32/12:16] - record block size
+  uint64_t record_block_number;         // [0:8/4]    - record blcok number
+  uint64_t record_block_entries_number; // [8:16/4:8] - num entries the
+                                        // key-value entries number
+  uint64_t record_block_header_size;    // [16:24/8:12] - record block info size
+                                        // // TODO
+  uint64_t record_block_size;           // [24:32/12:16] - record block size
 
   std::vector<record_header_item *> record_header;
 
@@ -558,4 +574,4 @@ class Mdict {
    *     record block section     *
    ********************************/
 };
-}  // namespace mdict
+} // namespace mdict

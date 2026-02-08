@@ -21,28 +21,28 @@
  * @param bin Pointer to a 1-byte unsigned char array
  * @return uint8_t The converted unsigned 8-bit integer
  */
-uint8_t be_bin_to_u8(const unsigned char* bin /* 8 bytes char array*/);
+uint8_t be_bin_to_u8(const unsigned char *bin /* 8 bytes char array*/);
 
 /**
  * Converts a big-endian 2-byte binary array to an unsigned 16-bit integer
  * @param bin Pointer to a 2-byte unsigned char array
  * @return uint16_t The converted unsigned 16-bit integer
  */
-uint16_t be_bin_to_u16(const unsigned char* bin /* 4 bytes char array  */);
+uint16_t be_bin_to_u16(const unsigned char *bin /* 4 bytes char array  */);
 
 /**
  * Converts a big-endian 4-byte binary array to an unsigned 32-bit integer
  * @param bin Pointer to a 4-byte unsigned char array
  * @return uint32_t The converted unsigned 32-bit integer
  */
-uint32_t be_bin_to_u32(const unsigned char* bin /* 4 bytes char array  */);
+uint32_t be_bin_to_u32(const unsigned char *bin /* 4 bytes char array  */);
 
 /**
  * Converts a big-endian 8-byte binary array to an unsigned 64-bit integer
  * @param bin Pointer to an 8-byte unsigned char array
  * @return uint64_t The converted unsigned 64-bit integer
  */
-uint64_t be_bin_to_u64(const unsigned char* bin /* 8 bytes char array*/);
+uint64_t be_bin_to_u64(const unsigned char *bin /* 8 bytes char array*/);
 
 /**
  * Extracts a slice of bytes from a source byte array
@@ -53,8 +53,8 @@ uint64_t be_bin_to_u64(const unsigned char* bin /* 8 bytes char array*/);
  * @param distByte Destination byte array to store the extracted bytes
  * @return int Number of bytes successfully copied
  */
-int bin_slice(const char* srcByte, int srcByteLen, int offset, int len,
-              char* distByte);
+int bin_slice(const char *srcByte, int srcByteLen, int offset, int len,
+              char *distByte);
 
 /**
  * Prints bytes in either binary or hexadecimal format
@@ -64,7 +64,7 @@ int bin_slice(const char* srcByte, int srcByteLen, int offset, int len,
  * format
  * @param start_ofset Starting offset for display (default: 0)
  */
-void putbytes(const char* bytes, int len, bool hex,
+void putbytes(const char *bytes, int len, bool hex,
               unsigned long start_ofset = 0);
 
 // ================================================
@@ -78,7 +78,8 @@ void putbytes(const char* bytes, int len, bool hex,
  * @param len Length of the UTF-16 data in bytes
  * @return std::string The converted UTF-8 string
  */
-std::string le_bin_utf16_to_utf8(const char* bytes, int offset, int len);
+std::string le_bin_utf16_to_utf8(const char *bytes, int offset, int len);
+std::string be_bin_utf16_to_utf8(const char *bytes, int offset, int len);
 
 /**
  * Converts a big-endian binary array to UTF-8 string
@@ -87,8 +88,11 @@ std::string le_bin_utf16_to_utf8(const char* bytes, int offset, int len);
  * @param len Length of the data in bytes
  * @return std::string The converted UTF-8 string
  */
-std::string be_bin_to_utf8(const char* bytes, unsigned long offset,
+std::string be_bin_to_utf8(const char *bytes, unsigned long offset,
                            unsigned long len);
+
+std::string convert_encoding(const char *bytes, unsigned long offset,
+                             unsigned long len, const char *from_encoding);
 
 /**
  * Converts a big-endian binary array to UTF-16 string
@@ -97,7 +101,7 @@ std::string be_bin_to_utf8(const char* bytes, unsigned long offset,
  * @param len Length of the data in bytes
  * @return std::string The converted UTF-16 string
  */
-std::string be_bin_to_utf16(const char* bytes, unsigned long offset,
+std::string be_bin_to_utf16(const char *bytes, unsigned long offset,
                             unsigned long len);
 
 /**
@@ -107,4 +111,4 @@ std::string be_bin_to_utf16(const char* bytes, unsigned long offset,
  * @param target Destination buffer to store the hexadecimal string
  * @return int Number of characters written to the target buffer
  */
-int bintohex(const char* bin, unsigned long len, char* target);
+int bintohex(const char *bin, unsigned long len, char *target);

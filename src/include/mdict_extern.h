@@ -7,6 +7,7 @@
  */
 
 #pragma once
+#ifdef __cplusplus
 #include <string>
 
 // C++ function declarations
@@ -16,6 +17,7 @@
  * @return A string containing the MIME type
  */
 std::string mime_detect(const std::string &filename);
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,21 +27,19 @@ extern "C" {
 
 // Macro to wrap a pointer + size into SizedData
 typedef struct {
-    const void *data;
-    size_t size;
+  const void *data;
+  size_t size;
 } SizedData;
 
-#define WRAP_SIZED(ptr, len) ((SizedData){ .data = (ptr), .size = (len) })
+#define WRAP_SIZED(ptr, len) ((SizedData){.data = (ptr), .size = (len)})
 #define RETURN_SIZED(ptr, len) return WRAP_SIZED((ptr), (len))
-  
 
-  
 /**
  * Encoding type for locate function
  */
 typedef enum {
-  MDICT_ENCODING_BASE64 = 0,  // Default encoding, returns base64 string
-  MDICT_ENCODING_HEX = 1      // Returns raw hex string
+  MDICT_ENCODING_BASE64 = 0, // Default encoding, returns base64 string
+  MDICT_ENCODING_HEX = 1     // Returns raw hex string
 } mdict_encoding_t;
 
 /**
@@ -58,6 +58,7 @@ SizedData mdict_init(const char *dictionary_path);
  * allocated)
  */
 SizedData mdict_lookup(void *dict, const char *word);
+SizedData mdict_get_title(void *dict);
 
 /**
  * Locate a word in the dictionary without getting its definition
@@ -77,7 +78,8 @@ SizedData mdict_locate(void *dict, const char *word, mdict_encoding_t encoding);
  * @param result Pointer to store the parsed definition (memory will be
  * allocated)
  */
-SizedData mdict_parse_definition(void *dict, const char *word, unsigned long record_start);
+SizedData mdict_parse_definition(void *dict, const char *word,
+                                 unsigned long record_start);
 
 /**
  * Get a list of all keys in the dictionary
@@ -86,6 +88,19 @@ SizedData mdict_parse_definition(void *dict, const char *word, unsigned long rec
  * @return Array of simple_key_item structures containing the keys
  */
 simple_key_item **mdict_keylist(void *dict, uint64_t *len);
+
+/**
+ * Perform a native search in the dictionary
+ * @param dict Dictionary object pointer
+ * @param query Search term
+ * @param method Search method (0:exact, 1:forward, 2:backward,
+ * 3:contain/keyword)
+ * @param max_results Maximum results to return
+ * @param len Pointer to store the number of results
+ * @return Array of simple_key_item structures
+ */
+simple_key_item **mdict_search(void *dict, const char *query, int method,
+                               int max_results, uint64_t *len);
 
 /**
  * Free the memory allocated for a key list
@@ -128,8 +143,8 @@ void mdict_stem(void *dict, char *word, char **suggested_words, int length);
 int mdict_destroy(void *dict);
 
 // C wrapper for mime_detect
-SizedData c_mime_detect(const char* filename);
-  
+SizedData c_mime_detect(const char *filename);
+
 //-------------------------
 
 #ifdef __cplusplus
